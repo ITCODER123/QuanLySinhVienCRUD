@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Microsoft.EntityFrameworkCore;
 
 namespace QuanLySinhVienCRUD
 {
     public partial class Form1 : Form
     {
+        // Khai báo đối tượng tầng BUS (Business Logic Layer)
+        private readonly StudentBUS _studentBUS = new StudentBUS();
+
         public Form1()
         {
             InitializeComponent();
@@ -17,23 +18,22 @@ namespace QuanLySinhVienCRUD
 
         private async void Form1_Load(object sender, EventArgs e)
         {
-            lblTrangThai.Text = "Sẵn sàng.";
+            lblTrangThai.Text = "Sẵn sàng (Mô hình 3 lớp).";
             await TaiDanhSach();
         }
 
-        // ===== READ (Tải danh sách sinh viên) =====
+        // ===== READ: Tải danh sách sinh viên qua tầng BUS =====
         private async Task TaiDanhSach()
         {
             try
             {
-                using (var context = new AppDbContext())
-                {
-                    List<Student> danhSach = await context.Students.ToListAsync();
-                    dgvSinhVien.DataSource = null;
-                    dgvSinhVien.DataSource = danhSach;
-                    lblTrangThai.Text = $"Đã tải {danhSach.Count} sinh viên.";
-                    lblTrangThai.ForeColor = Color.DarkGreen;
-                }
+                List<Student> danhSach = await _studentBUS.GetListStudentsAsync();
+
+                dgvSinhVien.DataSource = null;
+                dgvSinhVien.DataSource = danhSach;
+
+                lblTrangThai.Text = $"Đã tải {danhSach.Count} sinh viên từ CSDL qua BUS.";
+                lblTrangThai.ForeColor = Color.DarkGreen;
             }
             catch (Exception ex)
             {
@@ -57,7 +57,7 @@ namespace QuanLySinhVienCRUD
             }
         }
 
-        // ===== CREATE (Thêm sinh viên) =====
+        // ===== CREATE: Thêm sinh viên =====
         private async void btnThem_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(txtHoTen.Text))
@@ -74,17 +74,14 @@ namespace QuanLySinhVienCRUD
 
             try
             {
-                using (var context = new AppDbContext())
-                {
-                    context.Students.Add(new Student { FullName = txtHoTen.Text, Grade = diem });
-                    await context.SaveChangesAsync();
+                var newStudent = new Student { FullName = txtHoTen.Text, Grade = diem };
+                await _studentBUS.AddStudentAsync(newStudent);
 
-                    lblTrangThai.Text = "Đã thêm sinh viên mới!";
-                    lblTrangThai.ForeColor = Color.DarkGreen;
-                    txtHoTen.Clear();
-                    txtDiem.Clear();
-                    await TaiDanhSach();
-                }
+                lblTrangThai.Text = "Đã thêm sinh viên mới!";
+                lblTrangThai.ForeColor = Color.DarkGreen;
+                txtHoTen.Clear();
+                txtDiem.Clear();
+                await TaiDanhSach();
             }
             catch (Exception ex)
             {
@@ -93,7 +90,7 @@ namespace QuanLySinhVienCRUD
             }
         }
 
-        // ===== UPDATE (Sửa thông tin sinh viên) =====
+        // ===== UPDATE: Sửa thông tin sinh viên =====
         private async void btnSua_Click(object sender, EventArgs e)
         {
             if (dgvSinhVien.CurrentRow?.DataBoundItem is not Student svDangChon)
@@ -116,20 +113,14 @@ namespace QuanLySinhVienCRUD
 
             try
             {
-                using (var context = new AppDbContext())
-                {
-                    Student sv = await context.Students.FindAsync(svDangChon.Id);
-                    if (sv != null)
-                    {
-                        sv.FullName = txtHoTen.Text;
-                        sv.Grade = diemMoi;
-                        await context.SaveChangesAsync();
+                svDangChon.FullName = txtHoTen.Text;
+                svDangChon.Grade = diemMoi;
 
-                        lblTrangThai.Text = "Đã cập nhật thông tin!";
-                        lblTrangThai.ForeColor = Color.DarkGreen;
-                        await TaiDanhSach();
-                    }
-                }
+                await _studentBUS.UpdateStudentAsync(svDangChon);
+
+                lblTrangThai.Text = "Đã cập nhật thông tin!";
+                lblTrangThai.ForeColor = Color.DarkGreen;
+                await TaiDanhSach();
             }
             catch (Exception ex)
             {
@@ -138,7 +129,7 @@ namespace QuanLySinhVienCRUD
             }
         }
 
-        // ===== DELETE (Xóa sinh viên) =====
+        // ===== DELETE: Xóa sinh viên =====
         private async void btnXoa_Click(object sender, EventArgs e)
         {
             if (dgvSinhVien.CurrentRow?.DataBoundItem is not Student svDangChon)
@@ -157,21 +148,13 @@ namespace QuanLySinhVienCRUD
 
             try
             {
-                using (var context = new AppDbContext())
-                {
-                    Student sv = await context.Students.FindAsync(svDangChon.Id);
-                    if (sv != null)
-                    {
-                        context.Students.Remove(sv);
-                        await context.SaveChangesAsync();
+                await _studentBUS.DeleteStudentAsync(svDangChon.Id);
 
-                        lblTrangThai.Text = "Đã xóa sinh viên!";
-                        lblTrangThai.ForeColor = Color.DarkGreen;
-                        txtHoTen.Clear();
-                        txtDiem.Clear();
-                        await TaiDanhSach();
-                    }
-                }
+                lblTrangThai.Text = "Đã xóa sinh viên!";
+                lblTrangThai.ForeColor = Color.DarkGreen;
+                txtHoTen.Clear();
+                txtDiem.Clear();
+                await TaiDanhSach();
             }
             catch (Exception ex)
             {
@@ -180,23 +163,17 @@ namespace QuanLySinhVienCRUD
             }
         }
 
-        // ===== LINQ to Entities (Lọc sinh viên đạt >= 5) =====
+        // ===== LINQ: Lọc sinh viên đạt (>=5) =====
         private async void btnLocDat_Click(object sender, EventArgs e)
         {
             try
             {
-                using (var context = new AppDbContext())
-                {
-                    List<Student> ketQua = await context.Students
-                        .Where(sv => sv.Grade >= 5)
-                        .OrderByDescending(sv => sv.Grade)
-                        .ToListAsync();
+                List<Student> ketQua = await _studentBUS.GetPassedStudentsAsync();
 
-                    dgvSinhVien.DataSource = null;
-                    dgvSinhVien.DataSource = ketQua;
-                    lblTrangThai.Text = $"Tìm thấy {ketQua.Count} sinh viên đạt (>=5).";
-                    lblTrangThai.ForeColor = Color.DarkGreen;
-                }
+                dgvSinhVien.DataSource = null;
+                dgvSinhVien.DataSource = ketQua;
+                lblTrangThai.Text = $"Tìm thấy {ketQua.Count} sinh viên đạt (>=5).";
+                lblTrangThai.ForeColor = Color.DarkGreen;
             }
             catch (Exception ex)
             {
@@ -204,7 +181,5 @@ namespace QuanLySinhVienCRUD
                 lblTrangThai.ForeColor = Color.Red;
             }
         }
-
-        
     }
 }
